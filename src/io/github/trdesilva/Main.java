@@ -12,7 +12,6 @@ import java.util.List;
 
 public class Main
 {
-    
     public static void main(String[] args) throws Exception
     {
         String url;
@@ -33,7 +32,7 @@ public class Main
         
         System.out.println("querying " + url);
         Document root = Jsoup.connect(url).get();
-        StringBuilder tsv = new StringBuilder("Player\tRank\tLast Ranked Season\tChamp 1\tChamp 2\tChamp 3\tChamp 4\tChamp 5\n");
+        StringBuilder tsv = new StringBuilder("Player\tRank\tStats From\tChamp 1\tChamp 2\tChamp 3\tChamp 4\tChamp 5\n");
         for(Element player: root.getElementsByClass("MultiSearchResultRow"))
         {
             tsv.append(getRow(player));
@@ -50,12 +49,22 @@ public class Main
         String playerName = player.getElementsByClass("SummonerName").text();
         System.out.println("checking " + playerName);
         columns.add(playerName);
-        columns.add(player.getElementsByClass("TierRank").get(1).text());
+        String rank = player.getElementsByClass("TierRank").get(1).text();
+        if(rank.startsWith("Level"))
+        {
+            Elements previousSeasonDiv = player.getElementsByClass("PreviousSeason");
+            if(previousSeasonDiv != null && previousSeasonDiv.size() > 0)
+            {
+                Elements previousSeasonList = previousSeasonDiv.get(0).getElementsByTag("li");
+                rank += String.format(" (%s)", previousSeasonList.get(previousSeasonList.size() - 1).text());
+            }
+        }
+        columns.add(rank);
         
         Document playerChampPage = Jsoup.connect(getIndividualLink(playerName, true)).get();
         
         Element seasons = playerChampPage.getElementById("champion_season");
-        columns.add(seasons.getElementsByTag("a").get(0).text());
+        columns.add(seasons.getElementsByClass("active").get(0).getElementsByTag("a").get(0).text());
         
         Elements mostRecentChampTable = playerChampPage.getElementsByClass("ChampionStatsBox").get(0)
                                                        .getElementsByClass("ChampionStatsTable").get(0)
@@ -77,8 +86,7 @@ public class Main
                 columns.add("N/A");
             }
         }
-    
-        System.out.println(columns);
+
         return String.join("\t", columns) + "\n";
     }
     
@@ -125,7 +133,7 @@ public class Main
     private static String getKda(Element champRow)
     {
         Element kdaCell = champRow.getElementsByClass("KDA").get(0);
-        return String.format("%s/%s/%s (%s)",
+        return String.format("%s/%s/%s (%s:1)",
                              kdaCell.getElementsByClass("Kill").text(),
                              kdaCell.getElementsByClass("Death").text(),
                              kdaCell.getElementsByClass("Assist").text(),
@@ -134,6 +142,6 @@ public class Main
     
     private static String getCs(Element champRow)
     {
-        return champRow.getElementsByClass("Cell").get(6).text() + "CS";
+        return champRow.getElementsByClass("Cell").get(6).text() + " CS";
     }
 }
