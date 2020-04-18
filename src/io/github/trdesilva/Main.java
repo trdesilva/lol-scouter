@@ -7,6 +7,8 @@ import org.jsoup.select.Elements;
 
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Main
 {
@@ -31,7 +33,7 @@ public class Main
         
         System.out.println("querying " + url);
         Document root = Jsoup.connect(url).get();
-        StringBuilder tsv = new StringBuilder("Player\tRank\tChamp1\tChamp2\tChamp3\tChamp4\tChamp5\n");
+        StringBuilder tsv = new StringBuilder("Player\tRank\tLast Ranked Season\tChamp 1\tChamp 2\tChamp 3\tChamp 4\tChamp 5\n");
         for(Element player: root.getElementsByClass("MultiSearchResultRow"))
         {
             tsv.append(getRow(player));
@@ -41,47 +43,97 @@ public class Main
         return;
     }
     
-    private static String getRow(Element player)
+    private static String getRow(Element player) throws Exception
     {
-        StringBuilder row = new StringBuilder();
+        List<String> columns = new ArrayList<String>(8);
         
-        row.append(player.getElementsByClass("SummonerName").text());
-        row.append('\t');
-        row.append(player.getElementsByClass("TierRank").get(1).text());
-        row.append('\t');
+        String playerName = player.getElementsByClass("SummonerName").text();
+        System.out.println("checking " + playerName);
+        columns.add(playerName);
+        columns.add(player.getElementsByClass("TierRank").get(1).text());
         
-        Elements mostRecentChampTable = player.getElementsByClass("ChampionSmallStats").get(0)
-                                              .getElementsByClass("Content").get(0)
-                                              .getElementsByClass("Row");
+        Document playerChampPage = Jsoup.connect(getIndividualLink(playerName, true)).get();
+        
+        Element seasons = playerChampPage.getElementById("champion_season");
+        columns.add(seasons.getElementsByTag("a").get(0).text());
+        
+        Elements mostRecentChampTable = playerChampPage.getElementsByClass("ChampionStatsBox").get(0)
+                                                       .getElementsByClass("ChampionStatsTable").get(0)
+                                                       .getElementsByClass("TopRanker");
         for(int i = 0; i < 5; i++)
         {
-            if(i > 0)
-            {
-                row.append("\t");
-            }
             if(i < mostRecentChampTable.size())
             {
                 Element champRow = mostRecentChampTable.get(i);
-                StringBuilder champData = new StringBuilder();
-                champData.append(champRow.getElementsByClass("ChampionName").text());
-                champData.append(": ");
-                champData.append(champRow.getElementsByClass("GameCount").text());
-                champData.append(' ');
-                champData.append(champRow.getElementsByClass("WinRatio").text());
-                champData.append(' ');
-                champData.append(champRow.getElementsByClass("KDA").text());
-        
-                row.append(champData);
+                String champData = String.format("%s %s %s %s",
+                                                 getChampName(champRow),
+                                                 getWinLoss(champRow),
+                                                 getKda(champRow),
+                                                 getCs(champRow));
+                columns.add(champData);
+            }
+            else
+            {
+                columns.add("N/A");
             }
         }
-        
-        row.append('\n');
-        
-        return row.toString();
+    
+        System.out.println(columns);
+        return String.join("\t", columns) + "\n";
     }
     
-    private static String getIndividualLink(Element player)
+    private static String getIndividualLink(String playerName, boolean championsTable)
     {
-        return "http:" + player.getElementsByClass("Summoner").get(0).getElementsByAttribute("href").get(0).attr("href");
+        return "https://na.op.gg/summoner/" + (championsTable ? "champions/" : "") + "userName=" + playerName;
+    }
+    
+    private static String getChampName(Element champRow)
+    {
+        return champRow.getElementsByClass("ChampionName").get(0).attr("data-value");
+    }
+    
+    private static String getWinLoss(Element champRow)
+    {
+        Element winRatioCell = champRow.getElementsByClass("WinRatioGraph").get(0);
+        String stat1 = winRatioCell.getElementsByClass("Text").get(0).text();
+        String stat2 = winRatioCell.getElementsByClass("Text").size() > 1 ?
+                winRatioCell.getElementsByClass("Text").get(0).text() : "";
+        String wins;
+        String losses;
+        // if they have 0% or 100% winrate, there will only be one Text element, so we can't use index to know which is which
+        if(stat1.endsWith("W") && stat2.isBlank())
+        {
+            wins = stat1;
+            losses = "0L";
+        }
+        else if(stat1.endsWith("L"))
+        {
+            wins = "0W";
+            losses = stat1;
+        }
+        else
+        {
+            wins = stat1;
+            losses = stat2;
+        }
+        return String.format("%s/%s (%s)",
+                             wins,
+                             losses,
+                             winRatioCell.getElementsByClass("WinRatio").text());
+    }
+    
+    private static String getKda(Element champRow)
+    {
+        Element kdaCell = champRow.getElementsByClass("KDA").get(0);
+        return String.format("%s/%s/%s (%s)",
+                             kdaCell.getElementsByClass("Kill").text(),
+                             kdaCell.getElementsByClass("Death").text(),
+                             kdaCell.getElementsByClass("Assist").text(),
+                             champRow.getElementsByClass("KDA").get(0).attr("data-value"));
+    }
+    
+    private static String getCs(Element champRow)
+    {
+        return champRow.getElementsByClass("Cell").get(6).text() + "CS";
     }
 }
