@@ -105,7 +105,7 @@ public class Main
         Element winRatioCell = champRow.getElementsByClass("WinRatioGraph").get(0);
         String stat1 = winRatioCell.getElementsByClass("Text").get(0).text();
         String stat2 = winRatioCell.getElementsByClass("Text").size() > 1 ?
-                winRatioCell.getElementsByClass("Text").get(0).text() : "";
+                winRatioCell.getElementsByClass("Text").get(1).text() : "";
         String wins;
         String losses;
         // if they have 0% or 100% winrate, there will only be one Text element, so we can't use index to know which is which
